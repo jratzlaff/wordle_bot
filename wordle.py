@@ -38,24 +38,24 @@ class manual_wordle:
         return correct_letters, partial_letters, incorrect_letters
 
 class solver:
-    def __init__(self, length, wordle=manual_wordle(), word_bank=None):
+    def __init__(self, length, wordle=manual_wordle(), word_bank=None, count_left_for_easy_mode=1, debug=True):
         self.length = length
         self.available_letters = set(list(string.ascii_uppercase))
         self.correct_letters = set()
         self.wordle = wordle
+        self.count_left_for_easy_mode = count_left_for_easy_mode
         if word_bank != None:
             self.word_bank = word_bank
         else:
             self.word_bank = build_word_bank(length)
+        self.debug=debug
     
     def guess(self, guess):
         guess = guess.upper()
-        print(guess)
-        print(len(self.word_bank))
+        if self.debug:
+            print(guess)
+            print(len(self.word_bank))
         corrects, partials, incorrects = self.wordle.guess(guess)
-        # print(corrects)
-        # print(partials)
-        # print(incorrects)
         for correct in corrects:
             self.trim_from_correct(correct)
         for incorrect in incorrects:
@@ -108,23 +108,38 @@ class solver:
         return ans,count
 
     def select_best_guess(self):
-        if len(self.word_bank) == 1 or len(self.correct_letters) < self.length-1:
+        if len(self.word_bank) <= 2 or len(self.correct_letters) < self.length-self.count_left_for_easy_mode:
             return self.select_most_used_letters()
-        return self.downselect()
+        #This can return None if the remaining letter is one of the existing correct letters
+        self.filter_remaining_letters()
+        word = self.weighted_downselect()
+        if word != None:
+            return word
+        #TODO: with > 1 remaining letter there's something better we can do here, but I'm not sure what
+        return self.select_most_used_letters()
         
-    def downselect(self):
+    def filter_remaining_letters(self):
+        #Basically just get rid of any letters that don't exist in the word bank
         remaining_letters = set()
-        for word in self.word_bank:
-            for letter in word:
-                remaining_letters.add(letter)
+        for letter in self.available_letters:
+            for word in self.word_bank:
+                if letter in word:
+                    remaining_letters.add(letter)
+                    break
+        self.available_letters = remaining_letters
+
+    def downselect(self):
+        remaining_letters = set(self.available_letters)
         for correct_letter in self.correct_letters:
             try:
                 remaining_letters.remove(correct_letter[1])
             except:
                 pass
-        # remaining_letters-=self.correct_letters
+        #This is basically just making sure you're not using this function if the number of letters left is less than the number of spots left, in that case it's best to just stick to real guesses
+        if len(remaining_letters)<=self.count_left_for_easy_mode:
+            return None
         fresh_bank = build_word_bank(self.length)
-        best_word = ''
+        best_word = None
         best_count = 0
         for word in fresh_bank:
             count = 0
@@ -136,10 +151,39 @@ class solver:
                 best_count = count
         return best_word
 
-        
+    def weighted_downselect(self):
+        remaining_letters = set(self.available_letters)
+        for correct_letter in self.correct_letters:
+            try:
+                remaining_letters.remove(correct_letter[1])
+            except:
+                pass
+        #This is basically just making sure you're not using this function if the number of letters left is less than the number of spots left, in that case it's best to just stick to real guesses
+        if len(remaining_letters)<=self.count_left_for_easy_mode:
+            return None
+
+        weights = {}
+        for letter in remaining_letters:
+            count = 0 
+            for word in self.word_bank:
+                if letter in word:
+                    count+=1
+            weights[letter] = count
+
+        fresh_bank = build_word_bank(self.length)
+        best_word = None
+        best_count = 0
+        for word in fresh_bank:
+            count = 0
+            for letter in remaining_letters:
+                if letter in word:
+                    count+=weights[letter]
+            if count > best_count:
+                best_word = word
+                best_count = count
+        return best_word
 
     def select_most_used_letters(self, available_letters=None):
-        #TODO: don't reuse letters?
         #TODO: position based filtering?
         letter_freq = 'ESIARNTOLCDUGPMKHBYFVWZXQJ'
         if available_letters == None:
@@ -201,11 +245,31 @@ class solver:
             temp_word_bank-=remove_bank
         return list(temp_word_bank)[0]
 
+WORD_BANKS = {}
 def build_word_bank(length):
-    word_bank = set()
-    with open('word_list.txt', 'r') as f:
-        for line in f.readlines():
-            word = line.strip()
-            if len(word) == length:
-                word_bank.add(word.upper())
-    return word_bank
+    global WORD_BANKS
+    if length not in WORD_BANKS:
+        wb = set()
+        with open('word_list.txt', 'r') as f:
+            for line in f.readlines():
+                word = line.strip()
+                if len(word) == length:
+                    wb.add(word.upper())
+        WORD_BANKS[length] = wb
+    return set(WORD_BANKS[length])
+
+def run_stats(length, count_left_for_easy_mode=1):
+    stats = {}
+    bank = build_word_bank(length)
+    i = 0
+    for w in bank:
+        # print(w)
+        sol = solver(5,wordle(w), debug=False, count_left_for_easy_mode = count_left_for_easy_mode).solve()
+        if sol[1] not in stats:
+            stats[sol[1]] = []
+        stats[sol[1]].append(sol[0])
+        i+=1
+        if i%100 == 0:
+            print(i)
+    return stats
+

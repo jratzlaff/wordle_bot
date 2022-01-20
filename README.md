@@ -3,6 +3,7 @@ A quick and dirty bot to play wordle.
 
 # Usage
 import wordle
+
 wordle.solver(word_length).solve()
 
 

@@ -1,0 +1,5 @@
+Hard Mode == count_left_for_easy_mode=0
+Simple Downselect One Letter = count_left_for_easy_mode=1 with the downselect function
+Simple Downselect Two Letter = count_left_for_easy_mode=2 with the downselect function
+Weighted Downselect One Letter = count_left_for_easy_mode=1 with the weighted_downselect function
+Weighted Downselect Two Letter = count_left_for_easy_mode=2 with the weighted_downselect function
